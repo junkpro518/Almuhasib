@@ -1,7 +1,12 @@
-import io
+"""PDF report generator for the Almuhasib bot.
+
+Requires Amiri-Regular.ttf in pdf/fonts/ (not committed to git).
+Download: https://fonts.google.com/specimen/Amiri
+"""
 import os
 from datetime import datetime
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 import arabic_reshaper
 from bidi.algorithm import get_display
 
@@ -20,19 +25,23 @@ def _has_arabic(text: str) -> bool:
     return any('؀' <= c <= 'ۿ' for c in text)
 
 
+def _compute_total(entries: list[dict]) -> float:
+    """Sum the amount field across all entries."""
+    return sum(float(e.get("amount", 0)) for e in entries)
+
+
 class _PDF(FPDF):
     def __init__(self):
         super().__init__()
-        self.set_compression(False)
         self.add_font("Amiri", style="", fname=_FONT_PATH)
         self.set_auto_page_break(auto=True, margin=15)
 
     def header(self):
         self.set_font("Amiri", size=18)
-        self.cell(0, 12, _ar("حساب المدفوعات"), ln=True, align="C")
+        self.cell(0, 12, _ar("حساب المدفوعات"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
         self.set_font("Amiri", size=10)
         today = datetime.now().strftime("%Y-%m-%d")
-        self.cell(0, 8, _ar(f"تاريخ التقرير: {today}"), ln=True, align="C")
+        self.cell(0, 8, _ar(f"تاريخ التقرير: {today}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
         self.ln(4)
 
     def footer(self):
@@ -57,7 +66,6 @@ def generate_report(entries: list[dict]) -> bytes:
 
     # Header row
     pdf.set_fill_color(220, 220, 220)
-    pdf.set_font("Amiri", size=11)
     for w, h in zip(col_widths, headers):
         pdf.cell(w, 9, h, border=1, align="C", fill=True)
     pdf.ln()
@@ -68,24 +76,19 @@ def generate_report(entries: list[dict]) -> bytes:
         amount = float(entry.get("amount", 0))
         total += amount
 
-        if amount < 0:
-            pdf.set_text_color(200, 0, 0)
-        else:
-            pdf.set_text_color(0, 0, 0)
+        pdf.set_text_color(200, 0, 0) if amount < 0 else pdf.set_text_color(0, 0, 0)
 
         merchant = entry.get("merchant", "")
         note = entry.get("note", "")
-        amount_str = f"SAR {amount:,.2f}"
 
         row = [
             str(i),
             entry.get("date", "")[:10],
             _ar(merchant) if _has_arabic(merchant) else merchant,
-            amount_str,
+            f"SAR {amount:,.2f}",
             _ar(note) if _has_arabic(note) else note,
         ]
-        aligns = ["C", "C", "L", "R", "L"]
-        for w, cell, align in zip(col_widths, row, aligns):
+        for w, cell, align in zip(col_widths, row, ["C", "C", "L", "R", "L"]):
             pdf.cell(w, 8, cell, border=1, align=align)
         pdf.ln()
 
@@ -93,19 +96,11 @@ def generate_report(entries: list[dict]) -> bytes:
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Amiri", size=12)
     pdf.set_fill_color(200, 230, 200)
-    total_label = _ar("الإجمالي")
     label_width = sum(col_widths[:3])
     value_width = sum(col_widths[3:])
-    pdf.cell(label_width, 10, total_label, border=1, align="R", fill=True)
-    if total < 0:
-        pdf.set_text_color(200, 0, 0)
-    else:
-        pdf.set_text_color(0, 100, 0)
-    total_str = f"{total:,.2f}"
-    pdf.cell(value_width, 10, f"SAR {total_str}", border=1, align="R", fill=True)
+    pdf.cell(label_width, 10, _ar("الإجمالي"), border=1, align="R", fill=True)
+    pdf.set_text_color(200, 0, 0) if total < 0 else pdf.set_text_color(0, 100, 0)
+    pdf.cell(value_width, 10, f"SAR {total:,.2f}", border=1, align="R", fill=True)
     pdf.ln()
-
-    # Embed total as plain-text metadata so it is searchable in raw PDF bytes
-    pdf.set_keywords(f"total={total_str}")
 
     return bytes(pdf.output())
