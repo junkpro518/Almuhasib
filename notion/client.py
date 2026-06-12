@@ -1,4 +1,5 @@
 from notion_client import Client
+from notion_client.helpers import collect_paginated_api
 from config import NOTION_API_KEY, NOTION_DATABASE_ID
 
 notion = Client(auth=NOTION_API_KEY)
@@ -31,19 +32,19 @@ def add_entry(
 
 
 def get_all_entries() -> list[dict]:
-    """Return all entries sorted by date ascending."""
-    response = notion.databases.query(
+    """Return all entries sorted by date ascending, handling pagination automatically."""
+    return collect_paginated_api(
+        notion.databases.query,
         database_id=NOTION_DATABASE_ID,
         sorts=[{"property": "التاريخ", "direction": "ascending"}],
     )
-    return response["results"]
 
 
 def get_total() -> float:
     """Sum المبلغ across all entries."""
     entries = get_all_entries()
     return sum(
-        e["properties"]["المبلغ"]["number"] or 0.0
+        e["properties"]["المبلغ"]["number"]
         for e in entries
         if e["properties"].get("المبلغ", {}).get("number") is not None
     )
@@ -66,7 +67,7 @@ def extract_entries_for_pdf(entries: list[dict]) -> list[dict]:
         merchant = ""
         title = props.get("المتجر", {}).get("title", [])
         if title:
-            merchant = title[0]["text"]["content"]
+            merchant = title[0].get("plain_text", title[0]["text"]["content"])
 
         amount = props.get("المبلغ", {}).get("number") or 0.0
 
@@ -78,7 +79,7 @@ def extract_entries_for_pdf(entries: list[dict]) -> list[dict]:
         note = ""
         note_parts = props.get("ملاحظة", {}).get("rich_text", [])
         if note_parts:
-            note = note_parts[0]["text"]["content"]
+            note = note_parts[0].get("plain_text", note_parts[0]["text"]["content"])
 
         result.append({"merchant": merchant, "amount": amount, "date": date_str, "note": note})
     return result
