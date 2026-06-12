@@ -1,4 +1,7 @@
+import html
 import io
+import logging
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -13,13 +16,19 @@ from bot import state
 from notion import client as notion_client
 from notion.client import extract_entries_for_pdf
 from pdf.generator import generate_report
-from config import REPORT_RECIPIENT_CHAT_ID
+from config import REPORT_RECIPIENT_CHAT_ID, TELEGRAM_OWNER_CHAT_ID
+
+logger = logging.getLogger(__name__)
 
 # Conversation states
 WAITING_NOTE = 1
 WAITING_AMOUNT = 2
 WAITING_MERCHANT = 3
 WAITING_MANUAL_NOTE = 4
+
+
+def _is_owner(update: Update) -> bool:
+    return update.effective_user is not None and update.effective_user.id == TELEGRAM_OWNER_CHAT_ID
 
 
 # ── Transaction button callbacks ──────────────────────────────────────────────
@@ -43,7 +52,7 @@ async def btn_yes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         card=txn.card,
     )
     await query.edit_message_text(
-        query.message.text + "\n\n✅ <b>تم الحفظ في الحساب</b>",
+        query.message.text_html + "\n\n✅ <b>تم الحفظ في الحساب</b>",
         parse_mode="HTML",
     )
 
@@ -71,16 +80,17 @@ async def handle_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         await update.message.reply_text("⚠️ انتهت صلاحية هذه العملية.")
         return ConversationHandler.END
 
+    note_text = update.message.text
     notion_client.add_entry(
         amount=txn.amount,
         merchant=txn.merchant,
         date_str=txn.datetime_str[:10],
         entry_type="بنكي",
         card=txn.card,
-        note=update.message.text,
+        note=note_text,
     )
     await update.message.reply_text(
-        f"✅ <b>تم الحفظ مع الملاحظة:</b> {update.message.text}",
+        f"✅ <b>تم الحفظ مع الملاحظة:</b> {html.escape(note_text)}",
         parse_mode="HTML",
     )
     return ConversationHandler.END
@@ -93,7 +103,7 @@ async def btn_no(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     txn_id = query.data.split(":", 1)[1]
     state.pop_transaction(txn_id)
     await query.edit_message_text(
-        query.message.text + "\n\n❌ <b>تم التجاهل</b>",
+        query.message.text_html + "\n\n❌ <b>تم التجاهل</b>",
         parse_mode="HTML",
     )
 
@@ -101,6 +111,8 @@ async def btn_no(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ── /add manual entry conversation ────────────────────────────────────────────
 
 async def cmd_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not _is_owner(update):
+        return ConversationHandler.END
     await update.message.reply_text("كم المبلغ؟ (سالب للخصم، مثال: -30)")
     return WAITING_AMOUNT
 
@@ -136,7 +148,6 @@ async def cmd_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def _save_manual_entry(
     update: Update, context: ContextTypes.DEFAULT_TYPE, note: str
 ) -> int:
-    from datetime import datetime
     amount = context.user_data.pop("manual_amount", 0.0)
     merchant = context.user_data.pop("manual_merchant", "—")
     date_str = datetime.now().strftime("%Y-%m-%d")
@@ -152,8 +163,8 @@ async def _save_manual_entry(
     await update.message.reply_text(
         f"✅ <b>تم الحفظ</b>\n"
         f"المبلغ: <b>SAR {sign}{amount:,.2f}</b>\n"
-        f"المتجر: {merchant}"
-        + (f"\nملاحظة: {note}" if note else ""),
+        f"المتجر: {html.escape(merchant)}"
+        + (f"\nملاحظة: {html.escape(note)}" if note else ""),
         parse_mode="HTML",
     )
     return ConversationHandler.END
@@ -168,7 +179,10 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # ── /report ───────────────────────────────────────────────────────────────────
 
 async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Generate PDF and send it to the owner AND to REPORT_RECIPIENT_CHAT_ID (43444478)."""
+    """Generate PDF and send it to the owner AND to REPORT_RECIPIENT_CHAT_ID."""
+    if not _is_owner(update):
+        return
+
     await update.message.reply_text("⏳ جاري إنشاء التقرير...")
     entries_raw = notion_client.get_all_entries()
     entries = extract_entries_for_pdf(entries_raw)
@@ -189,7 +203,7 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         caption=caption,
     )
 
-    # Send to report recipient (43444478)
+    # Send to report recipient
     if REPORT_RECIPIENT_CHAT_ID != update.effective_chat.id:
         try:
             await context.bot.send_document(
@@ -199,7 +213,7 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 caption=caption,
             )
         except Exception:
-            # Don't fail if the recipient hasn't started the bot yet
+            logger.warning("Failed to send report to recipient %s", REPORT_RECIPIENT_CHAT_ID)
             await update.message.reply_text(
                 "⚠️ تعذّر إرسال التقرير للمستخدم الآخر (قد لا يكون بدأ محادثة مع البوت)."
             )
@@ -208,6 +222,9 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 # ── /clear ────────────────────────────────────────────────────────────────────
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ نعم، امسح الكل", callback_data="clear_confirm"),
         InlineKeyboardButton("❌ إلغاء", callback_data="clear_cancel"),
