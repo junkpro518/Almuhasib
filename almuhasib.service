@@ -1,0 +1,16 @@
+[Unit]
+Description=Almuhasib Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=almuhasib
+WorkingDirectory=/opt/almuhasib
+EnvironmentFile=/opt/almuhasib/.env
+ExecStart=/opt/almuhasib/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
