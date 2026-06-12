@@ -1,6 +1,6 @@
-import json
 from unittest.mock import patch, MagicMock
 import pytest
+import requests as req_lib
 from webhook.server import create_app
 
 SAMPLE_SMS = """شراء عبر نقاط بيع SAR 10.50
@@ -17,28 +17,29 @@ def client():
         yield c
 
 
+def _post(client, text=SAMPLE_SMS, secret="test_secret_key_12345", **kwargs):
+    return client.post(
+        "/transaction",
+        json={"text": text},
+        headers={"X-Secret-Key": secret},
+        **kwargs,
+    )
+
+
 def test_missing_secret_returns_401(client):
     response = client.post("/transaction", json={"text": SAMPLE_SMS})
     assert response.status_code == 401
 
 
 def test_wrong_secret_returns_401(client):
-    response = client.post(
-        "/transaction",
-        json={"text": SAMPLE_SMS},
-        headers={"X-Secret-Key": "wrong_secret"},
-    )
+    response = _post(client, secret="wrong_secret")
     assert response.status_code == 401
 
 
 def test_valid_request_returns_200(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
-        response = client.post(
-            "/transaction",
-            json={"text": SAMPLE_SMS},
-            headers={"X-Secret-Key": "test_secret_key_12345"},
-        )
+        response = _post(client)
     assert response.status_code == 200
     data = response.get_json()
     assert data["status"] == "sent"
@@ -48,11 +49,7 @@ def test_valid_request_returns_200(client):
 def test_valid_request_sends_telegram_message(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
-        client.post(
-            "/transaction",
-            json={"text": SAMPLE_SMS},
-            headers={"X-Secret-Key": "test_secret_key_12345"},
-        )
+        _post(client)
     assert mock_post.called
     call_json = mock_post.call_args[1]["json"]
     assert "MATHAF ALGHIDHA EST" in call_json["text"]
@@ -62,14 +59,9 @@ def test_valid_request_sends_telegram_message(client):
 def test_unparseable_sms_returns_200_with_raw(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
-        response = client.post(
-            "/transaction",
-            json={"text": "some random text that is not a bank SMS"},
-            headers={"X-Secret-Key": "test_secret_key_12345"},
-        )
+        response = _post(client, text="some random text that is not a bank SMS")
     assert response.status_code == 200
-    data = response.get_json()
-    assert data["status"] == "unparseable"
+    assert response.get_json()["status"] == "unparseable"
 
 
 def test_missing_text_returns_400(client):
@@ -79,3 +71,31 @@ def test_missing_text_returns_400(client):
         headers={"X-Secret-Key": "test_secret_key_12345"},
     )
     assert response.status_code == 400
+
+
+def test_html_special_chars_in_sms_escaped(client):
+    sms_with_html = """شراء عبر نقاط بيع SAR 5.00
+بطاقة 1234* <TEST>
+من STORE & CO
+في 10:00 26-06-13"""
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        _post(client, text=sms_with_html)
+    call_json = mock_post.call_args[1]["json"]
+    assert "<TEST>" not in call_json["text"]
+    assert "&lt;" not in call_json["text"] or "&amp;" in call_json["text"] or "STORE" in call_json["text"]
+
+
+def test_telegram_failure_returns_502(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=False, text="Bad Request")
+        response = _post(client)
+    assert response.status_code == 502
+    assert response.get_json()["status"] == "error"
+
+
+def test_telegram_network_error_returns_502(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.side_effect = req_lib.exceptions.ConnectionError("network down")
+        response = _post(client)
+    assert response.status_code == 502

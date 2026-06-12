@@ -1,3 +1,5 @@
+import hmac
+import html
 import requests
 from flask import Flask, request, jsonify
 from config import (
@@ -12,15 +14,16 @@ from bot import state
 def _format_message(txn: Transaction) -> str:
     return (
         f"💳 <b>عملية شراء جديدة</b>\n\n"
-        f"المتجر:  <code>{txn.merchant}</code>\n"
+        f"المتجر:  <code>{html.escape(txn.merchant)}</code>\n"
         f"المبلغ:  <b>SAR {txn.amount:.2f}</b>\n"
-        f"البطاقة: {txn.card}\n"
+        f"البطاقة: {html.escape(txn.card)}\n"
         f"التاريخ: {txn.datetime_str}\n\n"
         f"هل هذه العملية تحت الحساب؟"
     )
 
 
-def _send_telegram_message(text: str, reply_markup: dict | None = None) -> None:
+def _send_telegram_message(text: str, reply_markup: dict | None = None) -> bool:
+    """Send a message to the bot owner. Returns True on success."""
     payload: dict = {
         "chat_id": TELEGRAM_OWNER_CHAT_ID,
         "text": text,
@@ -28,11 +31,15 @@ def _send_telegram_message(text: str, reply_markup: dict | None = None) -> None:
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        json=payload,
-        timeout=10,
-    )
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json=payload,
+            timeout=10,
+        )
+        return resp.ok
+    except requests.exceptions.RequestException:
+        return False
 
 
 def _make_transaction_keyboard(txn_id: str) -> dict:
@@ -51,7 +58,7 @@ def create_app() -> Flask:
     @app.route("/transaction", methods=["POST"])
     def receive_transaction():
         secret = request.headers.get("X-Secret-Key", "")
-        if secret != WEBHOOK_SECRET_KEY:
+        if not hmac.compare_digest(secret.encode(), WEBHOOK_SECRET_KEY.encode()):
             return jsonify({"error": "Unauthorized"}), 401
 
         data = request.get_json(silent=True)
@@ -60,16 +67,18 @@ def create_app() -> Flask:
 
         txn = parse_bank_sms(data["text"])
         if txn is None:
-            _send_telegram_message(
-                f"⚠️ رسالة غير معروفة:\n\n{data['text']}"
-            )
+            _send_telegram_message(f"⚠️ رسالة غير معروفة:\n\n{html.escape(data['text'])}")
             return jsonify({"status": "unparseable"}), 200
 
         txn_id = state.store_transaction(txn)
-        _send_telegram_message(
+        ok = _send_telegram_message(
             _format_message(txn),
             reply_markup=_make_transaction_keyboard(txn_id),
         )
+        if not ok:
+            state.pop_transaction(txn_id)  # rollback — don't leave orphan in state
+            return jsonify({"status": "error", "detail": "Telegram delivery failed"}), 502
+
         return jsonify({"status": "sent", "txn_id": txn_id}), 200
 
     return app
