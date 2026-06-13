@@ -3,6 +3,7 @@ import html
 import requests
 from flask import Flask, request, jsonify
 from config import (
+    ALLOWED_SMS_SENDERS,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_OWNER_CHAT_ID,
     WEBHOOK_SECRET_KEY,
@@ -52,6 +53,14 @@ def _make_transaction_keyboard(txn_id: str) -> dict:
     }
 
 
+def _sender_allowed(sender: str | None) -> bool:
+    """Allow unfiltered Shortcuts automations while filtering when sender is available."""
+    if not sender:
+        return True
+    normalized = sender.casefold()
+    return any(allowed in normalized for allowed in ALLOWED_SMS_SENDERS)
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
 
@@ -64,6 +73,10 @@ def create_app() -> Flask:
         data = request.get_json(silent=True)
         if not data or "text" not in data:
             return jsonify({"error": "Missing 'text' field"}), 400
+
+        sender = data.get("sender")
+        if not _sender_allowed(sender):
+            return jsonify({"status": "ignored", "reason": "sender_not_allowed"}), 200
 
         txn = parse_bank_sms(data["text"])
         if txn is None:

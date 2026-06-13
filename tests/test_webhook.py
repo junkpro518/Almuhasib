@@ -18,9 +18,12 @@ def client():
 
 
 def _post(client, text=SAMPLE_SMS, secret="test_secret_key_12345", **kwargs):
+    body = {"text": text}
+    if "sender" in kwargs:
+        body["sender"] = kwargs.pop("sender")
     return client.post(
         "/transaction",
-        json={"text": text},
+        json=body,
         headers={"X-Secret-Key": secret},
         **kwargs,
     )
@@ -54,6 +57,31 @@ def test_valid_request_sends_telegram_message(client):
     call_json = mock_post.call_args[1]["json"]
     assert "MATHAF ALGHIDHA EST" in call_json["text"]
     assert "10.50" in call_json["text"]
+
+
+def test_allowed_sender_is_processed(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = _post(client, sender="alinma")
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "sent"
+
+
+def test_unrecognized_sender_is_ignored(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = _post(client, sender="Other Bank")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ignored", "reason": "sender_not_allowed"}
+    assert not mock_post.called
+
+
+def test_missing_sender_still_allows_message_content_filter_automation(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = _post(client)
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "sent"
 
 
 def test_unparseable_sms_returns_200_with_raw(client):

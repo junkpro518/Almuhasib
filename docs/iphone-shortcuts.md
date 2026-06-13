@@ -14,7 +14,7 @@ This shortcut runs automatically when you receive an SMS from your bank. It forw
 2. Choose **Personal Automation**
 3. Scroll down and tap **Message** (or **Messages**)
 4. Set:
-   - **Sender**: your bank's sender name or number (e.g. `SNB`, `Al Rajhi`)
+   - **Sender**: leave it empty if iOS will not let you pick the bank sender ID.
    - **Message Contains**: `SAR` (to catch purchase SMSes only)
 5. Tap **Next**
 6. Tap **Add Action** → search for **"Get Contents of URL"** → select it
@@ -29,11 +29,12 @@ Tap the action to expand its settings:
 | Method | `POST` |
 | Request Body | `JSON` |
 
-Add two **JSON Body fields**:
+Add JSON Body fields:
 
 | Key | Value |
 |-----|-------|
 | `text` | Tap the variable picker → choose **Shortcut Input** → **Message Content** |
+| `sender` | Optional: if available, choose **Shortcut Input** → **Sender** |
 
 Tap **Add new header**:
 
@@ -58,4 +59,4 @@ You can test it manually:
 
 - **Bot doesn't respond**: check `sudo journalctl -u almuhasib -f` on the VPS
 - **401 Unauthorized**: the `X-Secret-Key` header doesn't match `WEBHOOK_SECRET_KEY` in `.env`
-- **No automation triggered**: make sure the sender filter matches exactly — check the SMS sender name in your Messages app
+- **No automation triggered**: leave the sender filter empty and use `Message Contains: SAR`; some bank sender IDs are not selectable contacts.
