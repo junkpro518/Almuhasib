@@ -28,7 +28,7 @@ def main() -> None:
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     register_handlers(application)
     logger.info("Starting Telegram bot (polling)")
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
