@@ -67,13 +67,13 @@ def test_allowed_sender_is_processed(client):
     assert response.get_json()["status"] == "sent"
 
 
-def test_unrecognized_sender_is_ignored(client):
+def test_unrecognized_sender_does_not_block_card_token_match(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
         response = _post(client, sender="Other Bank")
     assert response.status_code == 200
-    assert response.get_json() == {"status": "ignored", "reason": "sender_not_allowed"}
-    assert not mock_post.called
+    assert response.get_json()["status"] == "sent"
+    assert mock_post.called
 
 
 def test_missing_required_card_token_is_ignored(client):

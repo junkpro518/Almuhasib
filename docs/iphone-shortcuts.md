@@ -15,7 +15,7 @@ This shortcut runs automatically when you receive an SMS from your bank. It forw
 3. Scroll down and tap **Message** (or **Messages**)
 4. Set:
    - **Sender**: leave it empty; some bank sender IDs are not selectable contacts.
-   - **Message Contains**: `7796` (the card token used to narrow matching messages)
+   - **Message Contains**: `SAR` (let the automation run broadly; the server still requires `7796` and excludes `EHSAN`)
 5. Tap **Next**
 6. Tap **Add Action** → search for **"Get Contents of URL"** → select it
 
@@ -34,7 +34,7 @@ Add JSON Body fields:
 | Key | Value |
 |-----|-------|
 | `text` | Tap the variable picker → choose **Shortcut Input** → **Message Content** |
-| `sender` | Optional: if available, choose **Shortcut Input** → **Sender** |
+| `sender` | Do not add this field unless you specifically need it for debugging. The server now filters by message content, not sender. |
 
 Tap **Add new header**:
 
@@ -59,5 +59,5 @@ You can test it manually:
 
 - **Bot doesn't respond**: check `sudo journalctl -u almuhasib -f` on the VPS
 - **401 Unauthorized**: the `X-Secret-Key` header doesn't match `WEBHOOK_SECRET_KEY` in `.env`
-- **No automation triggered**: leave the sender filter empty and use `Message Contains: 7796`.
+- **No automation triggered**: leave the sender filter empty and use `Message Contains: SAR`. The server will ignore messages that do not contain `7796`.
 - **EHSAN transactions**: the server ignores messages containing `EHSAN` even if the shortcut runs.
