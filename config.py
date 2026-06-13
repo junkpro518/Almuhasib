@@ -18,3 +18,14 @@ ALLOWED_SMS_SENDERS: tuple[str, ...] = tuple(
     ).split(",")
     if sender.strip()
 )
+REQUIRED_CARD_TOKENS: tuple[str, ...] = tuple(
+    token.strip().casefold()
+    for token in os.getenv("REQUIRED_CARD_TOKENS", "7796").split(",")
+    if token.strip()
+)
+EXCLUDED_SMS_TOKENS: tuple[str, ...] = tuple(
+    token.strip().casefold()
+    for token in os.getenv("EXCLUDED_SMS_TOKENS", "EHSAN").split(",")
+    if token.strip()
+)
+RECEIPTS_DIR: str = os.getenv("RECEIPTS_DIR", "data/receipts")

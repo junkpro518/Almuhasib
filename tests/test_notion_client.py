@@ -80,6 +80,7 @@ def test_clear_all_archives_each_entry(mock_notion_client, monkeypatch):
 
 def test_extract_entries_for_pdf_maps_fields(mock_notion_client):
     raw = [{
+        "id": "page-id-1",
         "properties": {
             "المتجر": {"title": [{"plain_text": "Test Shop", "text": {"content": "Test Shop"}}]},
             "المبلغ": {"number": 42.5},
@@ -88,10 +89,24 @@ def test_extract_entries_for_pdf_maps_fields(mock_notion_client):
         }
     }]
     result = nc.extract_entries_for_pdf(raw)
-    assert result == [{"merchant": "Test Shop", "amount": 42.5, "date": "2026-06-13", "note": "note here"}]
+    assert result == [{
+        "id": "page-id-1",
+        "merchant": "Test Shop",
+        "amount": 42.5,
+        "date": "2026-06-13",
+        "note": "note here",
+        "receipt_path": "",
+    }]
 
 
 def test_extract_entries_handles_missing_fields(mock_notion_client):
-    raw = [{"properties": {}}]
+    raw = [{"id": "page-id-2", "properties": {}}]
     result = nc.extract_entries_for_pdf(raw)
-    assert result == [{"merchant": "", "amount": 0.0, "date": "", "note": ""}]
+    assert result == [{
+        "id": "page-id-2",
+        "merchant": "",
+        "amount": 0.0,
+        "date": "",
+        "note": "",
+        "receipt_path": "",
+    }]

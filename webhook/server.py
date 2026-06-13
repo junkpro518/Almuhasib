@@ -4,6 +4,8 @@ import requests
 from flask import Flask, request, jsonify
 from config import (
     ALLOWED_SMS_SENDERS,
+    EXCLUDED_SMS_TOKENS,
+    REQUIRED_CARD_TOKENS,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_OWNER_CHAT_ID,
     WEBHOOK_SECRET_KEY,
@@ -45,11 +47,17 @@ def _send_telegram_message(text: str, reply_markup: dict | None = None) -> bool:
 
 def _make_transaction_keyboard(txn_id: str) -> dict:
     return {
-        "inline_keyboard": [[
-            {"text": "✅ نعم", "callback_data": f"yes:{txn_id}"},
-            {"text": "📝 نعم + ملاحظة", "callback_data": f"yes_note:{txn_id}"},
-            {"text": "❌ لا", "callback_data": f"no:{txn_id}"},
-        ]]
+        "inline_keyboard": [
+            [
+                {"text": "✅ نعم", "callback_data": f"yes:{txn_id}"},
+                {"text": "📝 نعم + ملاحظة", "callback_data": f"yes_note:{txn_id}"},
+            ],
+            [
+                {"text": "📎 نعم + فاتورة", "callback_data": f"yes_receipt:{txn_id}"},
+                {"text": "📝📎 ملاحظة + فاتورة", "callback_data": f"yes_note_receipt:{txn_id}"},
+            ],
+            [{"text": "❌ لا", "callback_data": f"no:{txn_id}"}],
+        ]
     }
 
 
@@ -59,6 +67,15 @@ def _sender_allowed(sender: str | None) -> bool:
         return True
     normalized = sender.casefold()
     return any(allowed in normalized for allowed in ALLOWED_SMS_SENDERS)
+
+
+def _message_allowed(text: str) -> tuple[bool, str | None]:
+    normalized = text.casefold()
+    if any(token in normalized for token in EXCLUDED_SMS_TOKENS):
+        return False, "excluded_token"
+    if REQUIRED_CARD_TOKENS and not any(token in normalized for token in REQUIRED_CARD_TOKENS):
+        return False, "missing_required_card_token"
+    return True, None
 
 
 def create_app() -> Flask:
@@ -78,9 +95,14 @@ def create_app() -> Flask:
         if not _sender_allowed(sender):
             return jsonify({"status": "ignored", "reason": "sender_not_allowed"}), 200
 
-        txn = parse_bank_sms(data["text"])
+        text = data["text"]
+        allowed, reason = _message_allowed(text)
+        if not allowed:
+            return jsonify({"status": "ignored", "reason": reason}), 200
+
+        txn = parse_bank_sms(text)
         if txn is None:
-            _send_telegram_message(f"⚠️ رسالة غير معروفة:\n\n{html.escape(data['text'])}")
+            _send_telegram_message(f"⚠️ رسالة غير معروفة:\n\n{html.escape(text)}")
             return jsonify({"status": "unparseable"}), 200
 
         txn_id = state.store_transaction(txn)

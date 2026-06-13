@@ -25,6 +25,14 @@ def pop_transaction(txn_id: str) -> Optional[Transaction]:
         return entry[0] if entry else None
 
 
+def get_transaction(txn_id: str) -> Optional[Transaction]:
+    """Return a pending transaction without removing it."""
+    with _lock:
+        _evict_expired()
+        entry = _pending.get(txn_id)
+        return entry[0] if entry else None
+
+
 def _evict_expired() -> None:
     """Remove entries older than _TTL_SECONDS. Must be called with _lock held."""
     now = time.monotonic()

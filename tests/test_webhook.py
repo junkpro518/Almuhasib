@@ -76,6 +76,32 @@ def test_unrecognized_sender_is_ignored(client):
     assert not mock_post.called
 
 
+def test_missing_required_card_token_is_ignored(client):
+    sms = """شراء عبر نقاط بيع SAR 10.50
+بطاقة 1234* مدى- ApplePay
+من TEST STORE
+في 21:41 26-06-13"""
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = _post(client, text=sms)
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ignored", "reason": "missing_required_card_token"}
+    assert not mock_post.called
+
+
+def test_ehsan_sms_is_ignored(client):
+    sms = """شراء عبر نقاط بيع SAR 10.50
+بطاقة 7796* مدى- ApplePay
+من EHSAN
+في 21:41 26-06-13"""
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = _post(client, text=sms)
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ignored", "reason": "excluded_token"}
+    assert not mock_post.called
+
+
 def test_missing_sender_still_allows_message_content_filter_automation(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
@@ -87,7 +113,7 @@ def test_missing_sender_still_allows_message_content_filter_automation(client):
 def test_unparseable_sms_returns_200_with_raw(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
-        response = _post(client, text="some random text that is not a bank SMS")
+        response = _post(client, text="رسالة غير معروفة تحتوي 7796 وليست عملية بنك")
     assert response.status_code == 200
     assert response.get_json()["status"] == "unparseable"
 
@@ -103,7 +129,7 @@ def test_missing_text_returns_400(client):
 
 def test_html_special_chars_in_sms_escaped(client):
     sms_with_html = """شراء عبر نقاط بيع SAR 5.00
-بطاقة 1234* <TEST>
+بطاقة 7796* <TEST>
 من STORE & CO
 في 10:00 26-06-13"""
     with patch("webhook.server.requests.post") as mock_post:

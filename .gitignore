@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.pdf
+data/receipts/
 venv/
 .venv/
 .DS_Store

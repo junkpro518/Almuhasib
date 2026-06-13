@@ -1,6 +1,7 @@
 from notion_client import Client
 from notion_client.helpers import collect_paginated_api
 from config import NOTION_API_KEY, NOTION_DATABASE_ID
+from receipts.store import receipt_path_for_page
 
 notion = Client(auth=NOTION_API_KEY)
 
@@ -81,5 +82,13 @@ def extract_entries_for_pdf(entries: list[dict]) -> list[dict]:
         if note_parts:
             note = note_parts[0].get("plain_text", note_parts[0]["text"]["content"])
 
-        result.append({"merchant": merchant, "amount": amount, "date": date_str, "note": note})
+        receipt_path = receipt_path_for_page(e["id"])
+        result.append({
+            "id": e["id"],
+            "merchant": merchant,
+            "amount": amount,
+            "date": date_str,
+            "note": note,
+            "receipt_path": str(receipt_path) if receipt_path else "",
+        })
     return result

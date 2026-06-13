@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY bot ./bot
 COPY notion ./notion
 COPY pdf ./pdf
+COPY receipts ./receipts
 COPY webhook ./webhook
 COPY config.py main.py ./
 

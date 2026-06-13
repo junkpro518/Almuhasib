@@ -14,8 +14,8 @@ This shortcut runs automatically when you receive an SMS from your bank. It forw
 2. Choose **Personal Automation**
 3. Scroll down and tap **Message** (or **Messages**)
 4. Set:
-   - **Sender**: leave it empty if iOS will not let you pick the bank sender ID.
-   - **Message Contains**: `SAR` (to catch purchase SMSes only)
+   - **Sender**: leave it empty; some bank sender IDs are not selectable contacts.
+   - **Message Contains**: `7796` (the card token used to narrow matching messages)
 5. Tap **Next**
 6. Tap **Add Action** → search for **"Get Contents of URL"** → select it
 
@@ -59,4 +59,5 @@ You can test it manually:
 
 - **Bot doesn't respond**: check `sudo journalctl -u almuhasib -f` on the VPS
 - **401 Unauthorized**: the `X-Secret-Key` header doesn't match `WEBHOOK_SECRET_KEY` in `.env`
-- **No automation triggered**: leave the sender filter empty and use `Message Contains: SAR`; some bank sender IDs are not selectable contacts.
+- **No automation triggered**: leave the sender filter empty and use `Message Contains: 7796`.
+- **EHSAN transactions**: the server ignores messages containing `EHSAN` even if the shortcut runs.

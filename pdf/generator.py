@@ -5,6 +5,7 @@ Download: https://fonts.google.com/specimen/Amiri
 """
 import os
 from datetime import datetime
+from pathlib import Path
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 import arabic_reshaper
@@ -102,5 +103,29 @@ def generate_report(entries: list[dict]) -> bytes:
     pdf.set_text_color(200, 0, 0) if total < 0 else pdf.set_text_color(0, 100, 0)
     pdf.cell(value_width, 10, f"SAR {total:,.2f}", border=1, align="R", fill=True)
     pdf.ln()
+
+    receipt_entries = [entry for entry in entries if entry.get("receipt_path")]
+    if receipt_entries:
+        for i, entry in enumerate(receipt_entries, start=1):
+            receipt_path = Path(entry["receipt_path"])
+            if not receipt_path.exists():
+                continue
+            pdf.add_page()
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Amiri", size=15)
+            title = f"فاتورة العملية {i}: {entry.get('merchant', '')}"
+            pdf.cell(0, 10, _ar(title) if _has_arabic(title) else title, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+            pdf.set_font("Amiri", size=11)
+            pdf.cell(0, 8, f"SAR {float(entry.get('amount', 0)):,.2f} - {entry.get('date', '')[:10]}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+            pdf.ln(4)
+
+            max_width = pdf.w - pdf.l_margin - pdf.r_margin
+            max_height = pdf.h - pdf.get_y() - pdf.b_margin
+            try:
+                pdf.image(str(receipt_path), x=pdf.l_margin, y=pdf.get_y(), w=max_width, h=max_height, keep_aspect_ratio=True)
+            except Exception as exc:
+                pdf.set_font("Amiri", size=12)
+                msg = f"تعذر تضمين صورة الفاتورة: {receipt_path.name} ({exc})"
+                pdf.multi_cell(0, 8, _ar(msg), align="C")
 
     return bytes(pdf.output())

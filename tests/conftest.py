@@ -8,3 +8,7 @@ os.environ.setdefault("NOTION_DATABASE_ID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee
 os.environ.setdefault("WEBHOOK_SECRET_KEY", "test_secret_key_12345")
 os.environ.setdefault("WEBHOOK_PORT", "8080")
 os.environ.setdefault("REPORT_RECIPIENT_CHAT_ID", "43444478")
+os.environ.setdefault("ALLOWED_SMS_SENDERS", "alinma")
+os.environ.setdefault("REQUIRED_CARD_TOKENS", "7796")
+os.environ.setdefault("EXCLUDED_SMS_TOKENS", "EHSAN")
+os.environ.setdefault("RECEIPTS_DIR", "/tmp/almuhasib-test-receipts")
