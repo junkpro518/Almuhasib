@@ -6,7 +6,7 @@ This shortcut runs automatically when you receive an SMS from your bank. It forw
 
 - iPhone with iOS 16+
 - The "Shortcuts" app (pre-installed)
-- Your VPS is running and reachable at `http://YOUR_VPS_IP:8080`
+- Your VPS is running and reachable at `https://almuhasib.mohammed518.com`
 
 ## Create the Automation
 
@@ -25,7 +25,7 @@ Tap the action to expand its settings:
 
 | Field | Value |
 |-------|-------|
-| URL | `http://YOUR_VPS_IP:8080/transaction` |
+| URL | `https://almuhasib.mohammed518.com/transaction` |
 | Method | `POST` |
 | Request Body | `JSON` |
 

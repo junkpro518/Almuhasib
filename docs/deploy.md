@@ -1,51 +1,43 @@
 # VPS Deployment Guide
 
-## 1. Initial server setup
+Production runs as a Docker Compose app behind Traefik on the shared `proxy` network.
 
-```bash
-# Create a dedicated user (no login shell)
-sudo useradd -r -s /usr/sbin/nologin -d /opt/almuhasib almuhasib
-sudo mkdir -p /opt/almuhasib
-sudo chown almuhasib:almuhasib /opt/almuhasib
-```
+## 1. Server paths
+
+- Project path: `/opt/projects/Almuhasib`
+- Runtime env file: `/opt/projects/Almuhasib/.runtime.env`
+- Public URL: `https://almuhasib.mohammed518.com`
+- Shortcut endpoint: `POST https://almuhasib.mohammed518.com/transaction`
 
 ## 2. Copy project files
 
-From your local machine:
-
 ```bash
-rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' \
-  /path/to/Almuhasib/ user@YOUR_VPS_IP:/opt/almuhasib/
+rsync -az --delete \
+  --exclude='.git' \
+  --exclude='.venv' \
+  --exclude='__pycache__' \
+  --exclude='.pytest_cache' \
+  --exclude='.DS_Store' \
+  /path/to/Almuhasib/ claude@109.199.111.27:/tmp/almuhasib-upload/
 ```
 
-## 3. Create virtualenv and install dependencies
+Then install on the VPS:
 
 ```bash
-sudo -u almuhasib bash -c "
-  cd /opt/almuhasib
-  python3 -m venv .venv
-  .venv/bin/pip install -r requirements.txt
-"
+sudo mkdir -p /opt/projects/Almuhasib
+sudo rsync -a --delete \
+  --exclude='.git' \
+  --exclude='.venv' \
+  --exclude='__pycache__' \
+  --exclude='.pytest_cache' \
+  --exclude='.DS_Store' \
+  /tmp/almuhasib-upload/ /opt/projects/Almuhasib/
+sudo chown -R root:root /opt/projects/Almuhasib
 ```
 
-## 4. Download Amiri font
+## 3. Runtime environment
 
-```bash
-sudo -u almuhasib bash -c "
-  mkdir -p /opt/almuhasib/pdf/fonts
-  curl -L 'https://github.com/aliftype/amiri/releases/latest/download/Amiri-1.000.zip' \
-    -o /tmp/amiri.zip
-  unzip -j /tmp/amiri.zip 'Amiri-Regular.ttf' -d /opt/almuhasib/pdf/fonts/
-"
-```
-
-## 5. Create .env file
-
-```bash
-sudo -u almuhasib nano /opt/almuhasib/.env
-```
-
-Paste and fill in:
+Create `/opt/projects/Almuhasib/.runtime.env` and keep it out of Git:
 
 ```
 TELEGRAM_BOT_TOKEN=your_bot_token_here
@@ -57,47 +49,41 @@ WEBHOOK_SECRET_KEY=choose_a_strong_random_secret
 WEBHOOK_PORT=8080
 ```
 
-Secure the file:
-
 ```bash
-sudo chmod 600 /opt/almuhasib/.env
+sudo chmod 600 /opt/projects/Almuhasib/.runtime.env
 ```
 
-## 6. Install and start the systemd service
+The Compose file uses `env_file.format: raw` so secrets containing `$` are passed as-is.
+
+## 4. Start or update
+
+Run from `/opt/projects/Almuhasib`:
 
 ```bash
-sudo cp /opt/almuhasib/almuhasib.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable almuhasib
-sudo systemctl start almuhasib
+sudo docker compose config
+sudo docker compose up -d --build
+sudo docker compose ps
 ```
 
-Check status:
+Do not open port `8080` publicly. Traefik routes the domain to the container through the external Docker network `proxy`.
+
+## 5. DNS
+
+Cloudflare DNS record:
+
+- Type: `A`
+- Name: `almuhasib.mohammed518.com`
+- Content: `109.199.111.27`
+- Proxied: `false`
+
+## 6. Verification
 
 ```bash
-sudo systemctl status almuhasib
-sudo journalctl -u almuhasib -f
+sudo docker inspect --format '{{.State.Health.Status}}' almuhasib
+curl -sS -o /tmp/almuhasib_body.txt -w 'code=%{http_code} verify=%{ssl_verify_result}\n' \
+  -X POST https://almuhasib.mohammed518.com/transaction \
+  -H 'Content-Type: application/json' \
+  --data '{}'
 ```
 
-## 7. Open firewall port
-
-If using `ufw`:
-
-```bash
-sudo ufw allow 8080/tcp
-```
-
-If using `iptables`:
-
-```bash
-sudo iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
-```
-
-## 8. Updating the bot
-
-```bash
-rsync -av --exclude='.git' --exclude='.venv' --exclude='__pycache__' \
-  /path/to/Almuhasib/ user@YOUR_VPS_IP:/opt/almuhasib/
-
-ssh user@YOUR_VPS_IP "sudo systemctl restart almuhasib"
-```
+Expected unauthenticated result: HTTP `401`.
