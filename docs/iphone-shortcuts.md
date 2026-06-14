@@ -17,7 +17,8 @@ This shortcut runs automatically when you receive an SMS from your bank. It forw
    - **Sender**: leave it empty; some bank sender IDs are not selectable contacts.
    - **Message Contains**: `SAR` (let the automation run broadly; the server still requires `7796` and excludes `EHSAN`)
 5. Tap **Next**
-6. Tap **Add Action** → search for **"Get Contents of URL"** → select it
+6. Preferred: put **Get Contents of URL** directly inside this automation. If you use **Run Shortcut**, make sure its input is set to **Message Content** / **Shortcut Input**; running the shortcut without input sends an empty SMS body.
+7. Tap **Add Action** → search for **"Get Contents of URL"** → select it
 
 ### Configure the action
 
@@ -36,15 +37,17 @@ Add JSON Body fields:
 | `text` | Tap the variable picker → choose **Shortcut Input** → **Message Content** |
 | `sender` | Do not add this field unless you specifically need it for debugging. The server now filters by message content, not sender. |
 
+Do not leave `text` blank. It must be the actual SMS body from **Message Content**.
+
 Tap **Add new header**:
 
 | Key | Value |
 |-----|-------|
 | `X-Secret-Key` | The value of `WEBHOOK_SECRET_KEY` from your `.env` file |
 
-7. Tap **Next**
-8. Turn off **"Ask Before Running"**
-9. Tap **Done**
+8. Tap **Next**
+9. Turn off **"Ask Before Running"**
+10. Tap **Done**
 
 ## Test the Shortcut
 
@@ -60,4 +63,5 @@ You can test it manually:
 - **Bot doesn't respond**: check `sudo journalctl -u almuhasib -f` on the VPS
 - **401 Unauthorized**: the `X-Secret-Key` header doesn't match `WEBHOOK_SECRET_KEY` in `.env`
 - **No automation triggered**: leave the sender filter empty and use `Message Contains: SAR`. The server will ignore messages that do not contain `7796`.
+- **Telegram says the SMS body is empty**: the iPhone automation is running the shortcut without passing **Message Content**. Edit the automation action so the shortcut receives Message Content, or put the POST action directly in the automation.
 - **EHSAN transactions**: the server ignores messages containing `EHSAN` even if the shortcut runs.

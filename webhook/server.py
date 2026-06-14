@@ -64,8 +64,25 @@ def _make_transaction_keyboard(txn_id: str) -> dict:
     }
 
 
+def _extract_text(data: object) -> str | None:
+    if isinstance(data, str):
+        return data
+    if not isinstance(data, dict):
+        return None
+
+    for key in ("text", "message", "content", "body", "sms", "Message Content", "Shortcut Input"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+
+    value = data.get("text")
+    return value if isinstance(value, str) else None
+
+
 def _message_allowed(text: str) -> tuple[bool, str | None]:
     normalized = text.casefold()
+    if not text.strip():
+        return False, "empty_text"
     if any(token in normalized for token in EXCLUDED_SMS_TOKENS):
         return False, "excluded_token"
     if REQUIRED_CARD_TOKENS and not any(token in normalized for token in REQUIRED_CARD_TOKENS):
@@ -88,6 +105,14 @@ def _log_webhook_outcome(status: str, reason: str | None, sender: object, text: 
     )
 
 
+def _notify_empty_shortcut_payload() -> None:
+    _send_telegram_message(
+        "⚠️ وصل طلب من اختصار Almuhasib لكن نص رسالة البنك فاضي.\n\n"
+        "عدّل أتمتة الرسائل في الآيفون بحيث تمرر Message Content إلى الاختصار، "
+        "أو ضع إجراء Get Contents of URL مباشرة داخل الأتمتة."
+    )
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
 
@@ -98,19 +123,17 @@ def create_app() -> Flask:
             return jsonify({"error": "Unauthorized"}), 401
 
         data = request.get_json(silent=True)
-        if not data or "text" not in data:
-            _log_webhook_outcome("bad_request", "missing_text", None, None)
-            return jsonify({"error": "Missing 'text' field"}), 400
-
-        sender = data.get("sender")
-        text = data["text"]
-        if not isinstance(text, str):
-            _log_webhook_outcome("bad_request", "text_not_string", sender, text)
-            return jsonify({"error": "'text' field must be a string"}), 400
+        text = _extract_text(data)
+        sender = data.get("sender") if isinstance(data, dict) else None
+        if text is None:
+            _log_webhook_outcome("bad_request", "missing_text", sender, None)
+            return jsonify({"error": "Missing text field"}), 400
 
         allowed, reason = _message_allowed(text)
         if not allowed:
             _log_webhook_outcome("ignored", reason, sender, text)
+            if reason == "empty_text":
+                _notify_empty_shortcut_payload()
             return jsonify({"status": "ignored", "reason": reason}), 200
 
         txn = parse_bank_sms(text)

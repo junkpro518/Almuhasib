@@ -110,6 +110,29 @@ def test_missing_sender_still_allows_message_content_filter_automation(client):
     assert response.get_json()["status"] == "sent"
 
 
+def test_alternate_message_field_is_processed(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = client.post(
+            "/transaction",
+            json={"message": SAMPLE_SMS},
+            headers={"X-Secret-Key": "test_secret_key_12345"},
+        )
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "sent"
+    assert mock_post.called
+
+
+def test_empty_text_notifies_shortcut_config_error(client):
+    with patch("webhook.server.requests.post") as mock_post:
+        mock_post.return_value = MagicMock(ok=True)
+        response = _post(client, text="")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ignored", "reason": "empty_text"}
+    assert mock_post.called
+    assert "نص رسالة البنك فاضي" in mock_post.call_args[1]["json"]["text"]
+
+
 def test_unparseable_sms_returns_200_with_raw(client):
     with patch("webhook.server.requests.post") as mock_post:
         mock_post.return_value = MagicMock(ok=True)
